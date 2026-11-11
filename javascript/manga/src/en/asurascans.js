@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 0,
     "isNsfw": false,
-    "version": "0.1.4",
+    "version": "0.1.5",
     "pkgPath": "manga/src/en/asurascans.js",
     "notes": "Uses the public JSON API (api.asurascans.com). The website itself is behind a Cloudflare challenge, the API is not."
 }];
@@ -27,6 +27,11 @@ class DefaultExtension extends MProvider {
             "Accept": "application/json",
             "Referer": `${this.source.baseUrl}/`,
         };
+    }
+
+    // Some responses are `{data: {...}}`, others are top-level; normalise.
+    unwrap(json) {
+        return json && json.data && !Array.isArray(json.data) ? json.data : json;
     }
 
     async api(path) {
@@ -119,7 +124,7 @@ class DefaultExtension extends MProvider {
         if (latest.length) guesses.push(latest[0].slug);
         for (const guess of guesses) {
             try {
-                const data = (await this.api(`/series/${slug}/chapters/${guess}`)).data;
+                const data = this.unwrap(await this.api(`/series/${slug}/chapters/${guess}`));
                 if (data.chapter && data.chapter.published_at) {
                     dates[guess] = Date.parse(data.chapter.published_at);
                 }
@@ -146,7 +151,8 @@ class DefaultExtension extends MProvider {
 
     async getDetail(url) {
         const slug = url;
-        const s = (await this.api(`/series/${slug}`)).series;
+        const body = this.unwrap(await this.api(`/series/${slug}`));
+        const s = body.series || body;
         return {
             name: s.title,
             imageUrl: s.cover,
@@ -164,7 +170,7 @@ class DefaultExtension extends MProvider {
     async getPageList(url) {
         // url = "<series-slug>/<chapter-slug>"
         const [slug, chapterSlug] = url.split("/");
-        const data = (await this.api(`/series/${slug}/chapters/${chapterSlug}`)).data;
+        const data = this.unwrap(await this.api(`/series/${slug}/chapters/${chapterSlug}`));
         if (data.is_locked) throw new Error("This chapter is locked (early access / premium).");
         return (data.chapter.pages || []).map((p) => p.url);
     }
