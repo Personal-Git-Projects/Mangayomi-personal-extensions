@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 0,
     "isNsfw": false,
-    "version": "0.1.2",
+    "version": "0.1.3",
     "pkgPath": "manga/src/en/asurascans.js",
     "notes": "Uses the public JSON API (api.asurascans.com). The website itself is behind a Cloudflare challenge, the API is not."
 }];
@@ -98,33 +98,44 @@ class DefaultExtension extends MProvider {
 
     // The series endpoint has no chapter list; the chapter endpoint returns the
     // full `chapter_list` of the series, so we need any one valid chapter slug.
-    async findAnyChapterSlug(slug) {
-        for (const guess of ["chapter-1", "chapter-0"]) {
-            try {
-                await this.api(`/series/${slug}/chapters/${guess}`);
-                return guess;
-            } catch (e) { /* try next */ }
+    // `chapter_list` carries no dates. Real publish dates only exist on the
+    // listing's `latest_chapters` (3 newest) and on the chapter we fetch, so we
+    // return those as a slug -> epoch-ms map and leave the rest undated.
+    async findEntryChapter(slug, dates) {
+        let latest = [];
+        try {
+            const found = await this.api(`/series?search=${encodeURIComponent(slug.replace(/-/g, " "))}`);
+            const hit = (found.data || []).find((s) => s.slug === slug);
+            latest = hit && hit.latest_chapters ? hit.latest_chapters : [];
+        } catch (e) { /* dates are best effort */ }
+        for (const c of latest) {
+            if (c.published_at) dates[c.slug] = Date.parse(c.published_at);
         }
-        // Fall back to the latest chapter reported by the listing/search endpoint.
-        const found = await this.api(`/series?search=${encodeURIComponent(slug.replace(/-/g, " "))}`);
-        const hit = (found.data || []).find((s) => s.slug === slug);
-        if (hit && hit.latest_chapters && hit.latest_chapters.length) {
-            return hit.latest_chapters[0].slug;
+        const guesses = ["chapter-1", "chapter-0"];
+        if (latest.length) guesses.push(latest[0].slug);
+        for (const guess of guesses) {
+            try {
+                const data = (await this.api(`/series/${slug}/chapters/${guess}`)).data;
+                if (data.chapter && data.chapter.published_at) {
+                    dates[guess] = Date.parse(data.chapter.published_at);
+                }
+                return data;
+            } catch (e) { /* try next */ }
         }
         return null;
     }
 
     async getChapters(slug) {
-        const first = await this.findAnyChapterSlug(slug);
-        if (!first) return [];
-        const data = (await this.api(`/series/${slug}/chapters/${first}`)).data;
+        const dates = {};
+        const data = await this.findEntryChapter(slug, dates);
+        if (!data) return [];
         return (data.chapter_list || [])
             .slice()
             .sort((a, b) => b.number - a.number)
             .map((c) => ({
                 name: c.title ? `Chapter ${c.number} - ${c.title}` : `Chapter ${c.number}`,
                 url: `${slug}/${c.slug}`,
-                dateUpload: c.published_at ? String(Date.parse(c.published_at)) : null,
+                dateUpload: dates[c.slug] ? String(dates[c.slug]) : null,
                 scanlator: c.is_premium ? "Premium" : null,
             }));
     }
