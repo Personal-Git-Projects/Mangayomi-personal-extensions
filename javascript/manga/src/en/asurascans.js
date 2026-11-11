@@ -3,11 +3,11 @@ const mangayomiSources = [{
     "lang": "en",
     "baseUrl": "https://asurascans.com",
     "apiUrl": "https://api.asurascans.com/api",
-    "iconUrl": "https://asuracomic.net/images/logo.webp",
+    "iconUrl": "https://asurascans.com/apple-touch-icon.png",
     "typeSource": "single",
     "itemType": 0,
     "isNsfw": false,
-    "version": "0.1.3",
+    "version": "0.1.4",
     "pkgPath": "manga/src/en/asurascans.js",
     "notes": "Uses the public JSON API (api.asurascans.com). The website itself is behind a Cloudflare challenge, the API is not."
 }];
@@ -56,8 +56,8 @@ class DefaultExtension extends MProvider {
     }
 
     async getPopular(page) {
-        // NOTE: `sort=popular` is not verified against the API yet.
-        return this.parseList(await this.api(`/series?${this.pageQuery(page)}&sort=popular`));
+        // `sort=rating` is verified to reorder results; used as the "popular" ordering.
+        return this.parseList(await this.api(`/series?${this.pageQuery(page)}&sort=rating`));
     }
 
     get supportsLatest() {
@@ -69,9 +69,13 @@ class DefaultExtension extends MProvider {
     }
 
     async search(query, page, filters) {
-        return this.parseList(
-            await this.api(`/series?${this.pageQuery(page)}&search=${encodeURIComponent(query)}`)
-        );
+        let params = this.pageQuery(page);
+        if (query) params += `&search=${encodeURIComponent(query)}`;
+        for (const f of filters || []) {
+            const v = f.values && f.values[f.state] ? f.values[f.state].value : "";
+            if (v) params += `&${f.key}=${encodeURIComponent(v)}`;
+        }
+        return this.parseList(await this.api(`/series?${params}`));
     }
 
     // ---- detail ---------------------------------------------------------
@@ -166,7 +170,61 @@ class DefaultExtension extends MProvider {
     }
 
     getFilterList() {
-        return [];
+        const select = (name, key, options) => ({
+            type_name: "SelectFilter",
+            name,
+            key,
+            state: 0,
+            values: options.map(([value, label]) => ({
+                type_name: "SelectOption",
+                name: label,
+                value,
+            })),
+        });
+        return [
+            select("Genre", "genre", [
+                ["", "All"],
+                ["action", "Action"],
+                ["adventure", "Adventure"],
+                ["comedy", "Comedy"],
+                ["crazy-mc", "Crazy MC"],
+                ["demon", "Demon"],
+                ["drama", "Drama"],
+                ["dungeons", "Dungeons"],
+                ["fantasy", "Fantasy"],
+                ["game", "Game"],
+                ["genius-mc", "Genius MC"],
+                ["isekai", "Isekai"],
+                ["magic", "Magic"],
+                ["martial-arts", "Martial Arts"],
+                ["murim", "Murim"],
+                ["mystery", "Mystery"],
+                ["necromancer", "Necromancer"],
+                ["overpowered", "Overpowered"],
+                ["regression", "Regression"],
+                ["reincarnation", "Reincarnation"],
+                ["revenge", "Revenge"],
+                ["romance", "Romance"],
+                ["school-life", "School Life"],
+                ["shoujo", "Shoujo"],
+                ["shounen", "Shounen"],
+                ["system", "System"],
+                ["tower", "Tower"],
+                ["tragedy", "Tragedy"],
+                ["villain", "Villain"],
+            ]),
+            select("Status", "status", [
+                ["", "All"],
+                ["ongoing", "Ongoing"],
+                ["completed", "Completed"],
+                ["hiatus", "Hiatus"],
+                ["dropped", "Dropped"],
+            ]),
+            select("Sort", "sort", [
+                ["", "Default"],
+                ["rating", "Rating"],
+            ]),
+        ];
     }
 
     getSourcePreferences() {
