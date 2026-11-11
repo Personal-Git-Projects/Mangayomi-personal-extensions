@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.7",
+    "version": "0.0.8",
     "pkgPath": "novel/src/en/asurascans.js",
     "notes": "WORK IN PROGRESS: chapter text is read from the website reader page (may be blocked by Cloudflare); paid chapters are not supported yet. Optional paid access uses a session token set in the extension settings."
 }];
@@ -34,6 +34,7 @@ class DefaultExtension extends MProvider {
         return {
             "Accept": "application/json",
             "Referer": `${this.source.baseUrl}/`,
+            "Origin": this.source.baseUrl,
         };
     }
 
@@ -72,7 +73,13 @@ class DefaultExtension extends MProvider {
     }
 
     async getPopular(page) {
-        return this.novelPage(page, "&sort=popular&period=week");
+        // The API 403s some parameter combinations from the app; fall back.
+        for (const extra of ["&sort=popular&period=week", "&sort=popular", "&sort=update"]) {
+            try {
+                return await this.novelPage(page, extra);
+            } catch (e) { /* try next */ }
+        }
+        return this.novelPage(page, "&sort=update");
     }
 
     get supportsLatest() {
@@ -100,18 +107,42 @@ class DefaultExtension extends MProvider {
         }
     }
 
-    async getDetail(url) {
-        let n;
-        try {
-            n = this.unwrap(await this.api(`/novel-series/${url}`));
-        } catch (e) {
-            n = this.unwrap(await this.api(`/novels/${url}`));
+    stripHtml(html) {
+        return (html || "")
+            .replace(/<\s*br\s*\/?>/gi, "\n")
+            .replace(/<\/p>/gi, "\n")
+            .replace(/<[^>]+>/g, "")
+            .replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+            .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+    }
+
+    // No single-novel endpoint is confirmed, so try likely ones, then scan the list.
+    async findNovel(slug) {
+        for (const path of [`/novel-series/${slug}`, `/novels/${slug}`]) {
+            try {
+                const n = this.unwrap(await this.api(path));
+                const x = (n && (n.series || n.novel)) || n;
+                if (x && x.slug === slug) return x;
+            } catch (e) { /* try next */ }
         }
-        n = n.series || n.novel || n;
+        for (let offset = 0; offset < 200; offset += 20) {
+            const json = await this.api(`/novel-series?sort=update&limit=20&offset=${offset}`);
+            const raw = Array.isArray(json.data) ? json.data : [];
+            const hit = raw.find((x) => x.slug === slug);
+            if (hit) return hit;
+            if (raw.length < 20) break;
+        }
+        throw new Error(`Novel not found: ${slug}`);
+    }
+
+    async getDetail(url) {
+        const n = await this.findNovel(url);
         return {
             name: n.title,
-            imageUrl: n.cover_url,
-            description: n.description || "",
+            imageUrl: n.cover_url || n.cover || "",
+            description: this.stripHtml(n.description),
             author: n.author || "",
             status: this.mapStatus(n.status),
             genre: n.genres || [],
@@ -120,24 +151,22 @@ class DefaultExtension extends MProvider {
     }
 
     // No chapter-list endpoint is known. Chapter pages are /novels/<slug>/chapter/<n>,
-    // so list 1..count (count read from whichever field the API provides).
-    chapterCount(n) {
-        const keys = ["chapter_count", "chapters_count", "total_chapters", "chapterCount", "latest_chapter_number"];
-        for (const k of keys) {
-            if (Number(n[k]) > 0) return Number(n[k]);
-        }
-        const latest = n.latest_chapters || n.chapters;
-        if (Array.isArray(latest) && latest.length) {
-            return Math.max(...latest.map((c) => Number(c.number) || 0));
-        }
-        return 0;
-    }
-
+    // numbered first_chapter .. first_chapter+chapter_count-1. Titles/dates/lock
+    // state exist only for the few `recent_chapters` the API returns.
     buildChapters(slug, n) {
-        const count = this.chapterCount(n);
+        const count = Number(n.chapter_count) || 0;
+        const first = Number(n.first_chapter) || 0;
+        const recent = {};
+        for (const c of n.recent_chapters || []) recent[c.number] = c;
         const out = [];
-        for (let i = count; i >= 1; i--) {
-            out.push({ name: `Chapter ${i}`, url: `${slug}/${i}`, dateUpload: null, scanlator: null });
+        for (let i = first + count - 1; i >= first; i--) {
+            const r = recent[i];
+            out.push({
+                name: r && r.title ? `Chapter ${i} - ${r.title}` : `Chapter ${i}`,
+                url: `${slug}/${i}`,
+                dateUpload: r && r.published_at ? String(Date.parse(r.published_at)) : null,
+                scanlator: r && r.is_locked ? "Paid" : null,
+            });
         }
         return out;
     }
