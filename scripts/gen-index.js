@@ -53,6 +53,7 @@ for (const file of walk(jsRoot)) {
       ...s,
       id: s.id ?? hash(`${s.name}.${s.lang}.${s.itemType}`),
       typeSource: s.typeSource ?? "single",
+      sourceCodeLanguage: 1, // 0 = Dart, 1 = JavaScript
       sourceCodeUrl: `${rawBase}/javascript/${rel}`,
     });
   }
