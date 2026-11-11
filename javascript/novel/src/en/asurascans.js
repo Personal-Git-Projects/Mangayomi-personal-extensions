@@ -7,9 +7,9 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.2",
+    "version": "0.0.3",
     "pkgPath": "novel/src/en/asurascans.js",
-    "notes": "WORK IN PROGRESS: browsing and details work; chapter list and chapter text are not implemented yet (endpoints unknown). Optional paid access uses a session token set in the extension settings."
+    "notes": "WORK IN PROGRESS: chapter text is read from the website reader page (may be blocked by Cloudflare); paid chapters are not supported yet. Optional paid access uses a session token set in the extension settings."
 }];
 
 class DefaultExtension extends MProvider {
@@ -114,15 +114,86 @@ class DefaultExtension extends MProvider {
             author: n.author || "",
             status: this.mapStatus(n.status),
             genre: n.genres || [],
-            // TODO: chapter list endpoint not found yet. Free sample chapters:
-            // n.sample_chapter_count starting at n.sample_chapter_start.
-            chapters: [],
+            chapters: this.buildChapters(url, n),
         };
     }
 
-    // TODO: needs the chapter-content endpoint (and login for paid chapters).
+    // No chapter-list endpoint is known. Chapter pages are /novels/<slug>/chapter/<n>,
+    // so list 1..count (count read from whichever field the API provides).
+    chapterCount(n) {
+        const keys = ["chapter_count", "chapters_count", "total_chapters", "chapterCount", "latest_chapter_number"];
+        for (const k of keys) {
+            if (Number(n[k]) > 0) return Number(n[k]);
+        }
+        const latest = n.latest_chapters || n.chapters;
+        if (Array.isArray(latest) && latest.length) {
+            return Math.max(...latest.map((c) => Number(c.number) || 0));
+        }
+        return 0;
+    }
+
+    buildChapters(slug, n) {
+        const count = this.chapterCount(n);
+        const out = [];
+        for (let i = count; i >= 1; i--) {
+            out.push({ name: `Chapter ${i}`, url: `${slug}/${i}`, dateUpload: null, scanlator: null });
+        }
+        return out;
+    }
+
+    // ---- chapter text ---------------------------------------------------
+    // The reader page embeds the chapter in an <astro-island> "props" attribute
+    // (HTML-escaped, Astro-serialised JSON): paragraphs, isLocked, shardCost.
+
+    decodeAttr(v) {
+        return v.replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'")
+            .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+    }
+
+    // Astro encodes values as [0, v] (plain) or [1, [..]] (array).
+    astroValue(x) {
+        if (!Array.isArray(x) || x.length !== 2) return x;
+        if (x[0] === 1) return x[1].map((i) => this.astroValue(i));
+        if (x[0] === 0) {
+            const v = x[1];
+            if (v && typeof v === "object" && !Array.isArray(v)) {
+                const o = {};
+                for (const k of Object.keys(v)) o[k] = this.astroValue(v[k]);
+                return o;
+            }
+            return v;
+        }
+        return x;
+    }
+
+    parseReaderProps(html) {
+        const tag = html.match(/<astro-island[^>]*NovelReader[^>]*>/);
+        if (!tag) return null;
+        const m = tag[0].match(/\sprops="([^"]*)"/);
+        if (!m) return null;
+        const raw = JSON.parse(this.decodeAttr(m[1]));
+        const out = {};
+        for (const k of Object.keys(raw)) out[k] = this.astroValue(raw[k]);
+        return out;
+    }
+
     async getHtmlContent(name, url) {
-        throw new Error("Chapter text is not implemented yet.");
+        // url = "<novel-slug>/<chapter-number>"
+        const [slug, num] = url.split("/");
+        const res = await this.client.get(`${this.source.baseUrl}/novels/${slug}/chapter/${num}`, {
+            "Accept": "text/html",
+            "Referer": `${this.source.baseUrl}/novels/${slug}`,
+        });
+        if (res.statusCode && res.statusCode >= 400) {
+            throw new Error(`Asura page ${res.statusCode} (Cloudflare may be blocking the page).`);
+        }
+        const props = this.parseReaderProps(res.body);
+        if (!props) throw new Error("Could not find the chapter text on the page (Cloudflare challenge?).");
+        if (props.isLocked) {
+            throw new Error(`Paid chapter (costs ${props.shardCost || "?"} shards). Paid reading is not supported yet.`);
+        }
+        const title = `<h2>Chapter ${props.chapterNumber} - ${props.chapterTitle || ""}</h2>`;
+        return title + (props.paragraphs || []).join("\n");
     }
 
     async cleanHtmlContent(html) {
