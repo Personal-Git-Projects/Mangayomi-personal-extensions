@@ -1,1 +1,17 @@
-[]
+[
+  {
+    "name": "Asura Scans (Personal)",
+    "lang": "en",
+    "baseUrl": "https://asurascans.com",
+    "apiUrl": "https://api.asurascans.com/api",
+    "iconUrl": "https://asuracomic.net/images/logo.webp",
+    "typeSource": "single",
+    "itemType": 0,
+    "isNsfw": false,
+    "version": "0.1.0",
+    "pkgPath": "manga/src/en/asurascans.js",
+    "notes": "Uses the public JSON API (api.asurascans.com). The website itself is behind a Cloudflare challenge, the API is not.",
+    "id": 250956512,
+    "sourceCodeUrl": "https://raw.githubusercontent.com/Personal-Git-Projects/Mangayomi-personal-extensions/main/javascript/manga/src/en/asurascans.js"
+  }
+]
