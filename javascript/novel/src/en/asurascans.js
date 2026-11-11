@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.9",
+    "version": "0.0.10",
     "pkgPath": "novel/src/en/asurascans.js",
     "notes": "WORK IN PROGRESS: chapter text is read from the website reader page (may be blocked by Cloudflare); paid chapters are not supported yet. Optional paid access uses a session token set in the extension settings."
 }];
@@ -153,8 +153,31 @@ class DefaultExtension extends MProvider {
             author: n.author || "",
             status: this.mapStatus(n.status),
             genre: n.genres || [],
-            chapters: this.buildChapters(url, n),
+            chapters: await this.pageChapters(url, n),
         };
+    }
+
+    // The series page embeds the full chapter list (number, title, free, shardCost)
+    // in the NovelChapterList island. Fall back to a generated list if unavailable.
+    async pageChapters(slug, n) {
+        try {
+            const res = await this.client.get(`${this.source.baseUrl}/novels/${slug}`, {
+                "User-Agent": this.getHeaders()["User-Agent"],
+                "Accept": "text/html",
+                "Referer": `${this.source.baseUrl}/novels`,
+            });
+            const props = this.parseIsland(res.body, "NovelChapterList");
+            const list = props && props.chapters;
+            if (Array.isArray(list) && list.length) {
+                return list.slice().sort((a, b) => b.number - a.number).map((c) => ({
+                    name: c.title ? `Chapter ${c.number} - ${c.title}` : `Chapter ${c.number}`,
+                    url: `${slug}/${c.number}`,
+                    dateUpload: null,
+                    scanlator: c.free === false ? (c.shardCost ? `Paid (${c.shardCost} shards)` : "Paid") : null,
+                }));
+            }
+        } catch (e) { /* fall through */ }
+        return this.buildChapters(slug, n);
     }
 
     // No chapter-list endpoint is known. Chapter pages are /novels/<slug>/chapter/<n>,
@@ -204,7 +227,11 @@ class DefaultExtension extends MProvider {
     }
 
     parseReaderProps(html) {
-        const tag = html.match(/<astro-island[^>]*NovelReader[^>]*>/);
+        return this.parseIsland(html, "NovelReader");
+    }
+
+    parseIsland(html, name) {
+        const tag = (html || "").match(new RegExp(`<astro-island[^>]*${name}[^>]*>`));
         if (!tag) return null;
         const m = tag[0].match(/\sprops="([^"]*)"/);
         if (!m) return null;
@@ -215,20 +242,25 @@ class DefaultExtension extends MProvider {
     }
 
     async getHtmlContent(name, url) {
-        // url = "<novel-slug>/<chapter-number>"
-        const [slug, num] = url.split("/");
-        const res = await this.client.get(`${this.source.baseUrl}/novels/${slug}/chapter/${num}`, {
+        // url is "<slug>/<number>", but accept a full or relative reader URL too.
+        const m = url.match(/novels\/([^\/?#]+)\/chapter\/(-?\d+)/) || url.match(/^\/?([^\/?#]+)\/(-?\d+)\/?$/);
+        if (!m) throw new Error(`Unrecognised chapter url: ${url}`);
+        const slug = m[1];
+        const num = m[2];
+        const pageUrl = `${this.source.baseUrl}/novels/${slug}/chapter/${num}`;
+        const res = await this.client.get(pageUrl, {
+            "User-Agent": this.getHeaders()["User-Agent"],
             "Accept": "text/html",
             "Referer": `${this.source.baseUrl}/novels/${slug}`,
         });
         if (res.statusCode && res.statusCode >= 400) {
-            throw new Error(`Asura page ${res.statusCode} (Cloudflare may be blocking the page).`);
+            throw new Error(`Asura page ${res.statusCode} for ${pageUrl}`);
         }
         const props = this.parseReaderProps(res.body);
         if (!props) {
             const body = res.body || "";
             const t = (body.match(/<title>([^<]*)<\/title>/i) || [])[1] || "";
-            throw new Error(`No chapter data in page. status=${res.statusCode} len=${body.length} title="${t}" island=${body.includes("astro-island")} reader=${body.includes("NovelReader")}`);
+            throw new Error(`No chapter data in page ${pageUrl} (from "${url}"). status=${res.statusCode} len=${body.length} title="${t}" island=${body.includes("astro-island")} reader=${body.includes("NovelReader")}`);
         }
         if (props.isLocked) {
             throw new Error(`Paid chapter (costs ${props.shardCost || "?"} shards). Paid reading is not supported yet.`);
