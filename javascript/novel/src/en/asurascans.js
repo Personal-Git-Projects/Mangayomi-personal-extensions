@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.11",
+    "version": "0.0.12",
     "pkgPath": "novel/src/en/asurascans.js",
     "notes": "WORK IN PROGRESS: chapter text is read from the website reader page (may be blocked by Cloudflare); paid chapters are not supported yet. Optional paid access uses a session token set in the extension settings."
 }];
@@ -170,7 +170,7 @@ class DefaultExtension extends MProvider {
             const list = props && props.chapters;
             if (Array.isArray(list) && list.length) {
                 return list.slice().sort((a, b) => b.number - a.number).map((c) => ({
-                    name: c.title ? `Chapter ${c.number} - ${c.title}` : `Chapter ${c.number}`,
+                    name: (c.free === false ? "[Paid] " : "") + (c.title ? `Chapter ${c.number} - ${c.title}` : `Chapter ${c.number}`),
                     url: `${slug}/${c.number}`,
                     dateUpload: null,
                     scanlator: c.free === false ? (c.shardCost ? `Paid (${c.shardCost} shards)` : "Paid") : null,
@@ -192,7 +192,7 @@ class DefaultExtension extends MProvider {
         for (let i = first + count - 1; i >= first; i--) {
             const r = recent[i];
             out.push({
-                name: r && r.title ? `Chapter ${i} - ${r.title}` : `Chapter ${i}`,
+                name: (r && r.is_locked ? "[Paid] " : "") + (r && r.title ? `Chapter ${i} - ${r.title}` : `Chapter ${i}`),
                 url: `${slug}/${i}`,
                 dateUpload: r && r.published_at ? String(Date.parse(r.published_at)) : null,
                 scanlator: r && r.is_locked ? "Paid" : null,
