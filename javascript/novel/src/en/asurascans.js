@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.8",
+    "version": "0.0.9",
     "pkgPath": "novel/src/en/asurascans.js",
     "notes": "WORK IN PROGRESS: chapter text is read from the website reader page (may be blocked by Cloudflare); paid chapters are not supported yet. Optional paid access uses a session token set in the extension settings."
 }];
@@ -31,17 +31,24 @@ class DefaultExtension extends MProvider {
     }
 
     getHeaders() {
+        // Mirror the browser's API requests; the API 403s the app's default client.
         return {
-            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
             "Referer": `${this.source.baseUrl}/`,
             "Origin": this.source.baseUrl,
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-site",
         };
     }
 
     async api(path) {
         const res = await this.client.get(`${this.apiUrl}${path}`, this.getHeaders());
         if (res.statusCode && res.statusCode >= 400) {
-            throw new Error(`Asura API ${res.statusCode} for ${path}`);
+            const t = ((res.body || "").match(/<title>([^<]*)<\/title>/i) || [])[1] || (res.body || "").slice(0, 80);
+            throw new Error(`Asura API ${res.statusCode} for ${path} [${t}]`);
         }
         return JSON.parse(res.body);
     }
