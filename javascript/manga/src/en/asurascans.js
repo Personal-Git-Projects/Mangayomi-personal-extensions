@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 0,
     "isNsfw": false,
-    "version": "0.1.1",
+    "version": "0.1.2",
     "pkgPath": "manga/src/en/asurascans.js",
     "notes": "Uses the public JSON API (api.asurascans.com). The website itself is behind a Cloudflare challenge, the API is not."
 }];
@@ -39,6 +39,12 @@ class DefaultExtension extends MProvider {
 
     // ---- listings -------------------------------------------------------
 
+    // The API ignores `page`; it pages with limit/offset.
+    pageQuery(page) {
+        const limit = 20;
+        return `limit=${limit}&offset=${(Math.max(page, 1) - 1) * limit}`;
+    }
+
     parseList(json) {
         const list = (json.data || []).map((s) => ({
             name: s.title,
@@ -51,7 +57,7 @@ class DefaultExtension extends MProvider {
 
     async getPopular(page) {
         // NOTE: `sort=popular` is not verified against the API yet.
-        return this.parseList(await this.api(`/series?page=${page}&sort=popular`));
+        return this.parseList(await this.api(`/series?${this.pageQuery(page)}&sort=popular`));
     }
 
     get supportsLatest() {
@@ -59,12 +65,12 @@ class DefaultExtension extends MProvider {
     }
 
     async getLatestUpdates(page) {
-        return this.parseList(await this.api(`/series?page=${page}`));
+        return this.parseList(await this.api(`/series?${this.pageQuery(page)}`));
     }
 
     async search(query, page, filters) {
         return this.parseList(
-            await this.api(`/series?page=${page}&search=${encodeURIComponent(query)}`)
+            await this.api(`/series?${this.pageQuery(page)}&search=${encodeURIComponent(query)}`)
         );
     }
 
