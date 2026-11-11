@@ -7,9 +7,9 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 0,
     "isNsfw": false,
-    "version": "0.1.6",
+    "version": "0.1.7",
     "pkgPath": "manga/src/en/asurascans.js",
-    "notes": "Uses the public JSON API (api.asurascans.com). The website itself is behind a Cloudflare challenge, the API is not."
+    "notes": "Uses the public JSON API (api.asurascans.com). KNOWN ISSUE: the Genre/Status/Sort filters do not apply in the app yet (the filtered list shows the latest list)."
 }];
 
 class DefaultExtension extends MProvider {

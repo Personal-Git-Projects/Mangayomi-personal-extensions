@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "name": "Asura Scans Novels (Personal)",
+    "lang": "en",
+    "baseUrl": "https://asurascans.com",
+    "apiUrl": "https://api.asurascans.com/api",
+    "iconUrl": "https://asurascans.com/apple-touch-icon.png",
+    "typeSource": "single",
+    "itemType": 2,
+    "isNsfw": false,
+    "version": "0.0.1",
+    "pkgPath": "novel/src/en/asurascans.js",
+    "notes": "WORK IN PROGRESS: browsing and details work; chapter list and chapter text are not implemented yet (endpoints unknown). Optional paid account login is set in the extension settings.",
+    "id": 1749819767,
+    "sourceCodeLanguage": 1,
+    "sourceCodeUrl": "https://raw.githubusercontent.com/Personal-Git-Projects/Mangayomi-personal-extensions/main/javascript/novel/src/en/asurascans.js"
+  }
+]
