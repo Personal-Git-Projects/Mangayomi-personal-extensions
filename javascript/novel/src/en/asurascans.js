@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.10",
+    "version": "0.0.11",
     "pkgPath": "novel/src/en/asurascans.js",
     "notes": "WORK IN PROGRESS: chapter text is read from the website reader page (may be blocked by Cloudflare); paid chapters are not supported yet. Optional paid access uses a session token set in the extension settings."
 }];
@@ -241,6 +241,25 @@ class DefaultExtension extends MProvider {
         return out;
     }
 
+    // The reader does not decode entities like &#39; / &#34; / &hellip;, so turn
+    // them into real characters. &lt; &gt; &amp; stay escaped to keep the HTML valid.
+    decodeEntities(html) {
+        const named = {
+            quot: '"', apos: "'", nbsp: "\u00a0", hellip: "\u2026", mdash: "\u2014",
+            ndash: "\u2013", lsquo: "\u2018", rsquo: "\u2019", ldquo: "\u201c", rdquo: "\u201d",
+        };
+        return html
+            .replace(/&#(\d+);/g, (m, d) => {
+                const c = parseInt(d, 10);
+                return c === 60 || c === 62 || c === 38 ? m : String.fromCodePoint(c);
+            })
+            .replace(/&#x([0-9a-f]+);/gi, (m, h) => {
+                const c = parseInt(h, 16);
+                return c === 60 || c === 62 || c === 38 ? m : String.fromCodePoint(c);
+            })
+            .replace(/&([a-z]+);/gi, (m, n) => (named[n.toLowerCase()] !== undefined ? named[n.toLowerCase()] : m));
+    }
+
     async getHtmlContent(name, url) {
         // url is "<slug>/<number>", but accept a full or relative reader URL too.
         const m = url.match(/novels\/([^\/?#]+)\/chapter\/(-?\d+)/) || url.match(/^\/?([^\/?#]+)\/(-?\d+)\/?$/);
@@ -266,7 +285,7 @@ class DefaultExtension extends MProvider {
             throw new Error(`Paid chapter (costs ${props.shardCost || "?"} shards). Paid reading is not supported yet.`);
         }
         const title = `<h2>Chapter ${props.chapterNumber} - ${props.chapterTitle || ""}</h2>`;
-        return title + (props.paragraphs || []).join("\n");
+        return this.decodeEntities(title + (props.paragraphs || []).join("\n"));
     }
 
     async cleanHtmlContent(html) {
