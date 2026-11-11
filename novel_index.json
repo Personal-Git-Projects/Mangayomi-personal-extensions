@@ -8,7 +8,7 @@
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.5",
+    "version": "0.0.6",
     "pkgPath": "novel/src/en/asurascans.js",
     "notes": "WORK IN PROGRESS: chapter text is read from the website reader page (may be blocked by Cloudflare); paid chapters are not supported yet. Optional paid access uses a session token set in the extension settings.",
     "id": 1749819767,

@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.5",
+    "version": "0.0.6",
     "pkgPath": "novel/src/en/asurascans.js",
     "notes": "WORK IN PROGRESS: chapter text is read from the website reader page (may be blocked by Cloudflare); paid chapters are not supported yet. Optional paid access uses a session token set in the extension settings."
 }];
@@ -50,29 +50,30 @@ class DefaultExtension extends MProvider {
     }
 
     // ---- listings -------------------------------------------------------
-    // /novels pages with limit/offset like /series (the default response is only
-    // the first 9 of ~52 novels).
+    // WARNING: /novels is only the small paid-ebook catalog (~8 titles) and
+    // returns 403 if any query parameter is added. The site's full novel list
+    // (~52, e.g. cyberpunk-chivalry) comes from a different endpoint (TODO).
 
-    async novelPage(page, extra) {
-        const limit = 20;
-        const offset = (Math.max(page, 1) - 1) * limit;
-        const json = await this.api(`/novels?limit=${limit}&offset=${offset}${extra || ""}`);
-        const raw = json.data || [];
-        const list = raw.map((n) => ({
+    async allNovels() {
+        const json = await this.api("/novels");
+        return (json.data || []).map((n) => ({
             name: n.title,
             link: n.slug,
             imageUrl: n.cover_url,
+            _rating: n.rating || 0,
+            _updated: n.updated_at || "",
         }));
-        const meta = json.meta || {};
-        let hasNextPage;
-        if (typeof meta.has_more === "boolean") hasNextPage = meta.has_more;
-        else if (Number(meta.total) > 0) hasNextPage = offset + raw.length < Number(meta.total);
-        else hasNextPage = raw.length >= limit;
-        return { list, hasNextPage };
+    }
+
+    strip(list) {
+        return list.map(({ name, link, imageUrl }) => ({ name, link, imageUrl }));
     }
 
     async getPopular(page) {
-        return this.novelPage(page, "&sort=rating");
+        if (page > 1) return { list: [], hasNextPage: false };
+        const list = await this.allNovels();
+        list.sort((a, b) => b._rating - a._rating);
+        return { list: this.strip(list), hasNextPage: false };
     }
 
     get supportsLatest() {
@@ -80,12 +81,17 @@ class DefaultExtension extends MProvider {
     }
 
     async getLatestUpdates(page) {
-        return this.novelPage(page, "");
+        if (page > 1) return { list: [], hasNextPage: false };
+        const list = await this.allNovels();
+        list.sort((a, b) => b._updated.localeCompare(a._updated));
+        return { list: this.strip(list), hasNextPage: false };
     }
 
     async search(query, page, filters) {
-        const q = query ? `&search=${encodeURIComponent(query)}` : "";
-        return this.novelPage(page, q);
+        if (page > 1) return { list: [], hasNextPage: false };
+        const q = (query || "").toLowerCase();
+        const list = (await this.allNovels()).filter((n) => n.name.toLowerCase().includes(q));
+        return { list: this.strip(list), hasNextPage: false };
     }
 
     // ---- detail ---------------------------------------------------------
