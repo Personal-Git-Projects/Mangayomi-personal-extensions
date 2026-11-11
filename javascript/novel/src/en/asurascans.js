@@ -7,9 +7,9 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.1",
+    "version": "0.0.2",
     "pkgPath": "novel/src/en/asurascans.js",
-    "notes": "WORK IN PROGRESS: browsing and details work; chapter list and chapter text are not implemented yet (endpoints unknown). Optional paid account login is set in the extension settings."
+    "notes": "WORK IN PROGRESS: browsing and details work; chapter list and chapter text are not implemented yet (endpoints unknown). Optional paid access uses a session token set in the extension settings."
 }];
 
 class DefaultExtension extends MProvider {
@@ -133,28 +133,19 @@ class DefaultExtension extends MProvider {
         return [];
     }
 
-    // Optional paid-account login. Values are stored by the app on this device
-    // in plain text; leave empty to read free chapters only.
+    // Optional paid access. Paste a session token copied from your own logged-in
+    // browser (no password is stored). Empty = free chapters only. The app keeps
+    // this value on-device; it is not encrypted by the extension.
     getSourcePreferences() {
         return [
             {
-                key: "asura_username",
+                key: "asura_token",
                 editTextPreference: {
-                    title: "Username / email (optional)",
-                    summary: "Paid account, to also read paid chapters",
+                    title: "Session token (optional)",
+                    summary: "Paste your logged-in token to read paid chapters",
                     value: "",
-                    dialogTitle: "Asura username or email",
-                    dialogMessage: "",
-                },
-            },
-            {
-                key: "asura_password",
-                editTextPreference: {
-                    title: "Password (optional)",
-                    summary: "Stored on this device only",
-                    value: "",
-                    dialogTitle: "Asura password",
-                    dialogMessage: "",
+                    dialogTitle: "Asura session token",
+                    dialogMessage: "Copied from your own browser session. Never share it.",
                 },
             },
         ];
