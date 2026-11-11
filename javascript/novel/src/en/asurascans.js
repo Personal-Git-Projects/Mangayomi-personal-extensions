@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.3",
+    "version": "0.0.4",
     "pkgPath": "novel/src/en/asurascans.js",
     "notes": "WORK IN PROGRESS: chapter text is read from the website reader page (may be blocked by Cloudflare); paid chapters are not supported yet. Optional paid access uses a session token set in the extension settings."
 }];
@@ -188,7 +188,11 @@ class DefaultExtension extends MProvider {
             throw new Error(`Asura page ${res.statusCode} (Cloudflare may be blocking the page).`);
         }
         const props = this.parseReaderProps(res.body);
-        if (!props) throw new Error("Could not find the chapter text on the page (Cloudflare challenge?).");
+        if (!props) {
+            const body = res.body || "";
+            const t = (body.match(/<title>([^<]*)<\/title>/i) || [])[1] || "";
+            throw new Error(`No chapter data in page. status=${res.statusCode} len=${body.length} title="${t}" island=${body.includes("astro-island")} reader=${body.includes("NovelReader")}`);
+        }
         if (props.isLocked) {
             throw new Error(`Paid chapter (costs ${props.shardCost || "?"} shards). Paid reading is not supported yet.`);
         }
