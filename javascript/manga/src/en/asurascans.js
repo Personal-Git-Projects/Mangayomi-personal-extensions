@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 0,
     "isNsfw": false,
-    "version": "0.1.5",
+    "version": "0.1.6",
     "pkgPath": "manga/src/en/asurascans.js",
     "notes": "Uses the public JSON API (api.asurascans.com). The website itself is behind a Cloudflare challenge, the API is not."
 }];
@@ -76,9 +76,13 @@ class DefaultExtension extends MProvider {
     async search(query, page, filters) {
         let params = this.pageQuery(page);
         if (query) params += `&search=${encodeURIComponent(query)}`;
+        // The app only hands back type_name/name/state/values (custom fields are
+        // dropped), so map filters to API params by their display name.
+        const keyByName = { "Genre": "genre", "Status": "status", "Sort": "sort" };
         for (const f of filters || []) {
+            const key = keyByName[f.name];
             const v = f.values && f.values[f.state] ? f.values[f.state].value : "";
-            if (v) params += `&${f.key}=${encodeURIComponent(v)}`;
+            if (key && v) params += `&${key}=${encodeURIComponent(v)}`;
         }
         return this.parseList(await this.api(`/series?${params}`));
     }
