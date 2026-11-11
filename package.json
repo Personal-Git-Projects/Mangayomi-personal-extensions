@@ -1,0 +1,17 @@
+{
+  "name": "mangayomi-personal-extensions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal JS extensions for the Mangayomi app",
+  "license": "MIT",
+  "scripts": {
+    "gen": "node scripts/gen-index.js",
+    "check": "node scripts/gen-index.js --check",
+    "new": "node scripts/new-source.js",
+    "test": "node scripts/test-source.js"
+  },
+  "engines": { "node": ">=18" },
+  "devDependencies": {
+    "cheerio": "1.0.0"
+  }
+}
