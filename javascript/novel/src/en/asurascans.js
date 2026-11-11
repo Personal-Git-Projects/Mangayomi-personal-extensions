@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "itemType": 2,
     "isNsfw": false,
-    "version": "0.0.4",
+    "version": "0.0.5",
     "pkgPath": "novel/src/en/asurascans.js",
     "notes": "WORK IN PROGRESS: chapter text is read from the website reader page (may be blocked by Cloudflare); paid chapters are not supported yet. Optional paid access uses a session token set in the extension settings."
 }];
@@ -50,29 +50,29 @@ class DefaultExtension extends MProvider {
     }
 
     // ---- listings -------------------------------------------------------
-    // /novels returns every novel in one response (page/offset/limit are ignored),
-    // so there is only ever one page.
+    // /novels pages with limit/offset like /series (the default response is only
+    // the first 9 of ~52 novels).
 
-    async allNovels() {
-        const json = await this.api("/novels");
-        return (json.data || []).map((n) => ({
+    async novelPage(page, extra) {
+        const limit = 20;
+        const offset = (Math.max(page, 1) - 1) * limit;
+        const json = await this.api(`/novels?limit=${limit}&offset=${offset}${extra || ""}`);
+        const raw = json.data || [];
+        const list = raw.map((n) => ({
             name: n.title,
             link: n.slug,
             imageUrl: n.cover_url,
-            _rating: n.rating || 0,
-            _updated: n.updated_at || "",
         }));
-    }
-
-    strip(list) {
-        return list.map(({ name, link, imageUrl }) => ({ name, link, imageUrl }));
+        const meta = json.meta || {};
+        let hasNextPage;
+        if (typeof meta.has_more === "boolean") hasNextPage = meta.has_more;
+        else if (Number(meta.total) > 0) hasNextPage = offset + raw.length < Number(meta.total);
+        else hasNextPage = raw.length >= limit;
+        return { list, hasNextPage };
     }
 
     async getPopular(page) {
-        if (page > 1) return { list: [], hasNextPage: false };
-        const list = await this.allNovels();
-        list.sort((a, b) => b._rating - a._rating);
-        return { list: this.strip(list), hasNextPage: false };
+        return this.novelPage(page, "&sort=rating");
     }
 
     get supportsLatest() {
@@ -80,17 +80,12 @@ class DefaultExtension extends MProvider {
     }
 
     async getLatestUpdates(page) {
-        if (page > 1) return { list: [], hasNextPage: false };
-        const list = await this.allNovels();
-        list.sort((a, b) => b._updated.localeCompare(a._updated));
-        return { list: this.strip(list), hasNextPage: false };
+        return this.novelPage(page, "");
     }
 
     async search(query, page, filters) {
-        if (page > 1) return { list: [], hasNextPage: false };
-        const q = (query || "").toLowerCase();
-        const list = (await this.allNovels()).filter((n) => n.name.toLowerCase().includes(q));
-        return { list: this.strip(list), hasNextPage: false };
+        const q = query ? `&search=${encodeURIComponent(query)}` : "";
+        return this.novelPage(page, q);
     }
 
     // ---- detail ---------------------------------------------------------
